@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  lunarbot_simulation:
+    build: .
+    container_name: lunarbot_sim
+    privileged: true
+    network_mode: host
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./logs:/workspace/logs
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - GAZEBO_MODEL_PATH=/workspace/models
+      - TURTLEBOT3_MODEL=waffle_pi
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        source /workspace/install/setup.bash &&
+        ros2 launch lunarbot_bringup simulation.launch.py
+      "
+
+  lunarbot_navigation:
+    build: .
+    container_name: lunarbot_nav
+    network_mode: host
+    depends_on:
+      - lunarbot_simulation
+    environment:
+      - ROS_DOMAIN_ID=42
+    volumes:
+      - ./config:/workspace/config
+      - ./maps:/workspace/maps
+    command: >
+      bash -c "
+        source /workspace/install/setup.bash &&
+        sleep 10 &&
+        ros2 launch lunarbot_navigation navigation.launch.py
+      "
+
+  lunarbot_perception:
+    build: .
+    container_name: lunarbot_perception
+    network_mode: host
+    depends_on:
+      - lunarbot_simulation
+    environment:
+      - ROS_DOMAIN_ID=42
+    volumes:
+      - ./models:/workspace/models
+      - /dev:/dev
+    privileged: true
+    command: >
+      bash -c "
+        source /workspace/install/setup.bash &&
+        sleep 15 &&
+        ros2 launch lunarbot_perception perception.launch.py
+      "
+
+  lunarbot_web_backend:
+    build: .
+    container_name: lunarbot_web_backend
+    network_mode: host
+    depends_on:
+      - lunarbot_simulation
+      - lunarbot_navigation
+    environment:
+      - ROS_DOMAIN_ID=42
+      - FLASK_ENV=production
+    volumes:
+      - ./web_interface:/workspace/web_interface
+    ports:
+      - "5000:5000"
+    command: >
+      bash -c "
+        source /workspace/install/setup.bash &&
+        sleep 20 &&
+        cd /workspace/web_interface &&
+        python3 backend.py
+      "
+
+  lunarbot_web_frontend:
+    build: .
+    container_name: lunarbot_web_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web_frontend:/workspace/web_frontend
+    working_dir: /workspace/web_frontend
+    command: >
+      bash -c "
+        npm install &&
+        npm start
+      "
+
+  # Optional: Monitoring and logging
+  lunarbot_monitor:
+    image: grafana/grafana:latest
+    container_name: lunarbot_monitor
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=lunarbot2024
+
+volumes:
+  grafana_data:
+
+networks:
+  default:
+    driver: bridge

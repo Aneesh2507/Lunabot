@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LunarBot Navigation Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+            background: #000;
+        }
+
+        .simulation-canvas {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #000 100%);
+            cursor: crosshair;
+        }
+
+        .control-panel {
+            margin-bottom: 30px;
+        }
+
+        .control-panel h3 {
+            color: #64b5f6;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .control-btn {
+            padding: 12px;
+            background: linear-gradient(145deg, #2c3e50, #34495e);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-btn:hover {
+            background: linear-gradient(145deg, #3498db, #2980b9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn.forward {
+            grid-column: 2;
+        }
+
+        .control-btn.backward {
+            grid-column: 2;
+        }
+
+        .control-btn.left {
+            grid-column: 1;
+        }
+
+        .control-btn.right {
+            grid-column: 1;
+        }
+
+        .emergency-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(145deg, #e74c3c, #c0392b);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .emergency-btn:hover {
+            background: linear-gradient(145deg, #c0392b, #a93226);
+            transform: scale(1.05);
+        }
+
+        .status-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .status-label {
+            color: #bdc3c7;
+        }
+
+        .status-value {
+            color: #ecf0f1;
+            font-weight: bold;
+        }
+
+        .battery-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .battery-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c 0%, #f39c12 50%, #27ae60 100%);
+            transition: width 0.3s ease;
+        }
+
+        .navigation-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .coordinate-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .coordinate-input input {
+            flex: 1;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .coordinate-input input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .navigate-btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(145deg, #27ae60, #229954);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .navigate-btn:hover {
+            background: linear-gradient(145deg, #229954, #1e8449);
+        }
+
+        .terrain-info {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .terrain-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .connection-status.connected {
+            background: rgba(39, 174, 96, 0.8);
+        }
+
+        .connection-status.disconnected {
+            background: rgba(231, 76, 60, 0.8);
+        }
+
+        .instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+
+        .instructions h4 {
+            color: #64b5f6;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            list-style: none;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+            color: #bdc3c7;
+        }
+
+        .bot-trail {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .trail-point {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: rgba(100, 181, 246, 0.6);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="control-panel">
+                <h3>🎮 Bot Control</h3>
+                <div class="control-grid">
+                    <button class="control-btn left" onclick="moveBot('left')">← Turn Left</button>
+                    <button class="control-btn right" onclick="moveBot('right')">Turn Right →</button>
+                    <button class="control-btn forward" onclick="moveBot('forward')">↑ Forward</button>
+                    <button class="control-btn backward" onclick="moveBot('backward')">↓ Backward</button>
+                </div>
+                <button class="emergency-btn" onclick="stopBot()">🚨 Emergency Stop</button>
+            </div>
+
+            <div class="status-panel">
+                <h3>📊 Bot Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Battery Level</span>
+                    <span class="status-value" id="battery-level">100%</span>
+                </div>
+                <div class="battery-bar">
+                    <div class="battery-fill" id="battery-fill" style="width: 100%"></div>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Speed</span>
+                    <span class="status-value" id="bot-speed">0.00 m/s</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Position</span>
+                    <span class="status-value" id="bot-position">(1000, 1000)</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Status</span>
+                    <span class="status-value" id="bot-status">idle</span>
+                </div>
+            </div>
+
+            <div class="navigation-panel">
+                <h3>🎯 Navigation</h3>
+                <div class="coordinate-input">
+                    <input type="number" id="nav-x" placeholder="X Coordinate" step="10">
+                    <input type="number" id="nav-y" placeholder="Y Coordinate" step="10">
+                </div>
+                <button class="navigate-btn" onclick="navigateToCoordinates()">Navigate to Coordinates</button>
+            </div>
+
+            <div class="terrain-info">
+                <h3>🌙 Terrain Info</h3>
+                <div class="terrain-item">
+                    <span class="status-label">Obstacles</span>
+                    <span class="status-value" id="obstacle-count">0</span>
+                </div>
+                <div class="terrain-item">
+                    <span class="status-label">Safe Paths</span>
+                    <span class="status-value" id="path-count">0</span>
+                </div>
+                <div class="terrain-item">
+                    <span class="status-label">World Size</span>
+                    <span class="status-value" id="world-size">2000x2000</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <canvas id="simulation-canvas" class="simulation-canvas"></canvas>
+        </div>
+    </div>
+
+    <div class="connection-status" id="connection-status">Disconnected</div>
+
+    <div class="instructions">
+        <h4>Instructions</h4>
+        <ul>
+            <li>Use control buttons to move the bot</li>
+            <li>Click on the canvas to set navigation target</li>
+            <li>Green lines show safe paths</li>
+            <li>Gray circles are obstacles to avoid</li>
+            <li>Blue circle is the bot with yellow direction indicator</li>
+            <li>Red circle shows navigation target</li>
+        </ul>
+    </div>
+
+    <script>
+        // WebSocket connection
+        const socket = io();
+        
+        // Canvas setup
+        const canvas = document.getElementById('simulation-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Simulation state
+        let simulationState = {
+            bot: {
+                position: { x: 1000, y: 1000 },
+                theta: 0,
+                speed: 0,
+                angular_speed: 0,
+                battery_level: 100,
+                status: 'idle',
+                target_position: null,
+                path_to_target: []
+            },
+            terrain: {
+                obstacles: [],
+                safe_paths: []
+            },
+            world: {
+                width: 2000,
+                height: 2000
+            }
+        };
+        
+        // Camera system
+        let camera = {
+            x: 0,
+            y: 0,
+            zoom: 1
+        };
+        
+        // Bot trail
+        let botTrail = [];
+        const maxTrailLength = 100;
+        
+        // Connection status
+        socket.on('connect', () => {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').className = 'connection-status connected';
+        });
+        
+        socket.on('disconnect', () => {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').className = 'connection-status disconnected';
+        });
+        
+        // Simulation updates
+        socket.on('simulation_update', (state) => {
+            simulationState = state;
+            updateUI();
+            updateBotTrail();
+        });
+        
+        // Bot control functions
+        function moveBot(direction) {
+            socket.emit('control_bot', { direction: direction });
+        }
+        
+        function stopBot() {
+            socket.emit('control_bot', { direction: 'stop' });
+        }
+        
+        function navigateToCoordinates() {
+            const x = parseFloat(document.getElementById('nav-x').value) || 0;
+            const y = parseFloat(document.getElementById('nav-y').value) || 0;
+            socket.emit('navigate_to', { x: x, y: y });
+        }
+        
+        // Canvas click handler
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            // Convert screen coordinates to world coordinates
+            const worldX = (x / camera.zoom) + camera.x;
+            const worldY = (y / camera.zoom) + camera.y;
+            
+            socket.emit('navigate_to', { x: worldX, y: worldY });
+        });
+        
+        // Update UI
+        function updateUI() {
+            const bot = simulationState.bot;
+            
+            document.getElementById('battery-level').textContent = bot.battery_level.toFixed(1) + '%';
+            document.getElementById('battery-fill').style.width = bot.battery_level + '%';
+            document.getElementById('bot-speed').textContent = bot.speed.toFixed(2) + ' m/s';
+            document.getElementById('bot-position').textContent = 
+                `(${bot.position.x.toFixed(0)}, ${bot.position.y.toFixed(0)})`;
+            document.getElementById('bot-status').textContent = bot.status;
+            
+            document.getElementById('obstacle-count').textContent = simulationState.terrain.obstacles.length;
+            document.getElementById('path-count').textContent = simulationState.terrain.safe_paths.length;
+            document.getElementById('world-size').textContent = 
+                `${simulationState.world.width}x${simulationState.world.height}`;
+        }
+        
+        // Update bot trail
+        function updateBotTrail() {
+            const bot = simulationState.bot;
+            botTrail.push({ x: bot.position.x, y: bot.position.y });
+            
+            if (botTrail.length > maxTrailLength) {
+                botTrail.shift();
+            }
+        }
+        
+        // Rendering functions
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#000011';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Update camera to follow bot
+            const bot = simulationState.bot;
+            camera.x = bot.position.x - canvas.width / 2;
+            camera.y = bot.position.y - canvas.height / 2;
+            
+            // Draw grid
+            drawGrid();
+            
+            // Draw terrain
+            drawTerrain();
+            
+            // Draw bot trail
+            drawBotTrail();
+            
+            // Draw bot
+            drawBot();
+            
+            // Draw navigation path
+            drawNavigationPath();
+            
+            requestAnimationFrame(render);
+        }
+        
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 50;
+            const startX = Math.floor(camera.x / gridSize) * gridSize;
+            const startY = Math.floor(camera.y / gridSize) * gridSize;
+            
+            for (let x = startX; x < camera.x + canvas.width; x += gridSize) {
+                const screenX = x - camera.x;
+                ctx.beginPath();
+                ctx.moveTo(screenX, 0);
+                ctx.lineTo(screenX, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = startY; y < camera.y + canvas.height; y += gridSize) {
+                const screenY = y - camera.y;
+                ctx.beginPath();
+                ctx.moveTo(0, screenY);
+                ctx.lineTo(canvas.width, screenY);
+                ctx.stroke();
+            }
+        }
+        
+        function drawTerrain() {
+            // Draw obstacles
+            simulationState.terrain.obstacles.forEach(obstacle => {
+                const screenX = obstacle.x - camera.x;
+                const screenY = obstacle.y - camera.y;
+                
+                if (screenX > -obstacle.radius && screenX < canvas.width + obstacle.radius &&
+                    screenY > -obstacle.radius && screenY < canvas.height + obstacle.radius) {
+                    
+                    ctx.fillStyle = '#666666';
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, obstacle.radius, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Draw obstacle type indicator
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(obstacle.obstacle_type.charAt(0).toUpperCase(), screenX, screenY + 4);
+                }
+            });
+            
+            // Draw safe paths
+            simulationState.terrain.safe_paths.forEach(path => {
+                const startX = path.start_x - camera.x;
+                const startY = path.start_y - camera.y;
+                const endX = path.end_x - camera.x;
+                const endY = path.end_y - camera.y;
+                
+                if ((startX > 0 && startX < canvas.width && startY > 0 && startY < canvas.height) ||
+                    (endX > 0 && endX < canvas.width && endY > 0 && endY < canvas.height)) {
+                    
+                    const safetyColor = Math.floor(255 * path.safety_score);
+                    ctx.strokeStyle = `rgba(0, ${safetyColor}, 0, 0.8)`;
+                    ctx.lineWidth = path.width / 10;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+            });
+        }
+        
+        function drawBotTrail() {
+            ctx.strokeStyle = 'rgba(100, 181, 246, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            botTrail.forEach((point, index) => {
+                const screenX = point.x - camera.x;
+                const screenY = point.y - camera.y;
+                
+                if (index === 0) {
+                    ctx.moveTo(screenX, screenY);
+                } else {
+                    ctx.lineTo(screenX, screenY);
+                }
+            });
+            
+            ctx.stroke();
+        }
+        
+        function drawBot() {
+            const bot = simulationState.bot;
+            const screenX = bot.position.x - camera.x;
+            const screenY = bot.position.y - camera.y;
+            
+            // Draw bot body
+            ctx.fillStyle = '#64b5f6';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, 15, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw direction indicator
+            const directionX = screenX + 15 * Math.cos(bot.theta);
+            const directionY = screenY + 15 * Math.sin(bot.theta);
+            
+            ctx.strokeStyle = '#ffeb3b';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY);
+            ctx.lineTo(directionX, directionY);
+            ctx.stroke();
+            
+            // Draw bot status indicator
+            ctx.fillStyle = bot.status === 'idle' ? '#4caf50' : 
+                           bot.status === 'moving' ? '#ff9800' : 
+                           bot.status === 'navigating' ? '#2196f3' : '#f44336';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, 8, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        
+        function drawNavigationPath() {
+            const bot = simulationState.bot;
+            
+            if (bot.path_to_target && bot.path_to_target.length > 0) {
+                ctx.strokeStyle = '#ff5722';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                
+                bot.path_to_target.forEach((point, index) => {
+                    const screenX = point.x - camera.x;
+                    const screenY = point.y - camera.y;
+                    
+                    if (index === 0) {
+                        ctx.moveTo(screenX, screenY);
+                    } else {
+                        ctx.lineTo(screenX, screenY);
+                    }
+                });
+                
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Draw target marker
+            if (bot.target_position) {
+                const targetX = bot.target_position.x - camera.x;
+                const targetY = bot.target_position.y - camera.y;
+                
+                ctx.strokeStyle = '#f44336';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(targetX, targetY, 10, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                ctx.fillStyle = 'rgba(244, 67, 54, 0.3)';
+                ctx.beginPath();
+                ctx.arc(targetX, targetY, 20, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+        
+        // Start rendering loop
+        render();
+        
+        // Request initial state
+        socket.emit('start_simulation');
+    </script>
+</body>
+</html>
